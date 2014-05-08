@@ -79,6 +79,9 @@ public class Device implements Runnable {
         Thread t = new Thread(device);
         t.start();
         
+        /* Say hello to rest of peers */
+        device.sayHello();
+        
         /* Read from the command line */
         BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
         while (true) {
@@ -112,6 +115,7 @@ public class Device implements Runnable {
                         System.err.println("peer id must be numerical");
                     }
                 } else if (command.equals("exit")) {
+                    device.sayGoodbye();
                     t.interrupt();
                     break;
                 } else {
@@ -145,7 +149,9 @@ public class Device implements Runnable {
      * The listen method for the devices. The devices will expect incoming messages
      * one by one, and will process them as they come. There will be no separate
      * threads for receiving and processing since there will be a timeout to process
-     * the incoming messages
+     * the incoming messages.
+     * The logic for handling the messages is in the receiveMessage method. This
+     * method should not be edited anymore.
      * @throws IOException In case an unexpected error happens while reading connections
      */
     public void listen() throws IOException {
@@ -186,7 +192,7 @@ public class Device implements Runnable {
     /**
      * The sending method that will execute the instructions necessary for a 
      * message to reach the destination Socket. It's the opposite of the listen()
-     * method.
+     * method. This method should not be edited anymore.
      * @param m The message to be sent.
      */
     public synchronized void send(Message m) {
@@ -226,7 +232,7 @@ public class Device implements Runnable {
     }
     
     /**
-     * Contains the logic to be implemented when a message form a peer is 
+     * Contains the logic to be implemented when a message from a peer is 
      * received.
      * @param m The incoming message from the peer;
      */
@@ -235,6 +241,14 @@ public class Device implements Runnable {
         RemoteDevice peer = m.getSender();
         System.out.println(peer.getId() + "> " + m.getId() + ":" + m.getHeader() 
             + ":" + m.getMessage());
+        
+        /* Message handlers for every type of message */
+        if (m.getHeader().equals("hello")) {
+            if (!peers.contains(peer))
+                peers.add(peer);
+        } else if (m.getHeader().equals("goodbye")) {
+            peers.remove(peer);
+        }
     }
     
     /**
@@ -248,6 +262,32 @@ public class Device implements Runnable {
         
         serverSocket = new ServerSocket(port);
         return serverSocket.getLocalPort();
+    }
+    
+    /**
+     * Send a message notifying all peers you entered the network.
+     * The message has the header 'hello'.
+     */
+    public void sayHello() {
+        
+        String header = "hello";
+        String message = "";
+        for (RemoteDevice peer : peers) {
+            send(new Message(peer, header, message));
+        }
+    }
+    
+    /**
+     * Send a message notifying all peers you are exiting the network.
+     * The messages has the header 'goodbye'.
+     */
+    public void sayGoodbye() {
+     
+        String header = "goodbye";
+        String message = "";
+        for (RemoteDevice peer : peers) {
+            send(new Message(peer, header, message));
+        }
     }
 
     /**
