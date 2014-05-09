@@ -11,16 +11,62 @@ import java.util.HashMap;
 public class Game {
    
     private HashMap<String, Integer> values;
+    private HashMap<String, ResourceState> locks;
     
     public Game() {
         values = new HashMap();
+        locks = new HashMap();
     }
     
     public int getValue(String key) {
-        return values.get(key).intValue();
+        return getValues().get(key).intValue();
     }
     
     public void setValue(String key, int i) {
-        values.put(key, new Integer(i));
+        getValues().put(key, new Integer(i));
+    }
+    
+    public ResourceState getLock(String key) {
+        return getLocks().get(key);
+    }
+    
+    public boolean hasValue(String key) {
+        return getValues().containsKey(key);
+    }
+    
+    public void initLock(String key) {
+        getLocks().put(key, new ResourceState("RELEASED"));
+    }
+    
+    public void setLock(String key, ResourceState state) {
+        getLocks().put(key, state);
+    }
+
+    /**
+     * @return the values
+     */
+    public HashMap<String, Integer> getValues() {
+        return values;
+    }
+
+    /**
+     * @param values the values to set
+     */
+    public void setValues(HashMap<String, Integer> values) {
+        this.values = values;
+    }
+
+    /**
+     * @return the locks
+     */
+    public HashMap<String, ResourceState> getLocks() {
+        return locks;
+    }
+
+    /**
+     * @param locks the locks to set
+     */
+    public void setLocks(HashMap<String, ResourceState> locks) {
+        this.locks = locks;
     }
 }

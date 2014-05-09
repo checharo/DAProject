@@ -13,6 +13,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
 
@@ -40,32 +41,8 @@ public class Device implements Runnable {
         Device device = new Device();
         
         /* Establish the connection with tracker */
-        Socket tracker = null;
         try {
-            tracker = new Socket(serverIP, 12345);
-            DataInputStream in = new DataInputStream(tracker.getInputStream());
-            DataOutputStream out =new DataOutputStream(tracker.getOutputStream());
-            
-            /* Create a new listening socket from the ephemeral (random) port list */
-            int port = device.setListener(0);
-            out.writeInt(port);
-            
-            /* Read the id given and peer list */
-            device.setId(in.readInt());
-            boolean morePeers = in.readBoolean();
-            while (morePeers) {
-                RemoteDevice peer = new RemoteDevice(in.readInt(), 
-                    in.readUTF(), in.readInt());
-                device.getPeers().add(peer);
-                morePeers = in.readBoolean();
-            }
-            
-            try {
-                tracker.close();
-            } catch (IOException ioe) {
-                System.err.println("IOException while closing tracker "
-                    + ioe.getMessage());
-            }
+            device.establishConnection(serverIP);
         } catch (UnknownHostException uhe) {
             System.err.println("Unknown host: " + serverIP);
             System.exit(1);
@@ -88,6 +65,9 @@ public class Device implements Runnable {
             System.out.print("device> ");
             try {
                 String command = stdIn.readLine();
+                
+                /* peerlist */
+                
                 if (command.equals("peerlist")) {
                     if (device.getPeers().isEmpty())
                         System.out.println("Peerlist empty");
@@ -95,6 +75,9 @@ public class Device implements Runnable {
                         System.out.println(peer.getId() + " -> " 
                             + peer.getIpAddress() + ":" + peer.getPort());
                     }
+                
+                /* send */
+                
                 } else if (command.startsWith("send")) {
                     StringTokenizer st = new StringTokenizer(command, " ");
                     st.nextToken();
@@ -114,12 +97,54 @@ public class Device implements Runnable {
                     } catch (NumberFormatException nfe) {
                         System.err.println("peer id must be numerical");
                     }
+                
+                /* new */
+                
+                } else if (command.startsWith("new")) {
+                    StringTokenizer st = new StringTokenizer(command, " ");
+                    st.nextToken();
+                    try {
+                        st = new StringTokenizer(st.nextToken(), "|");
+                        String key = st.nextToken();
+                        int value = Integer.parseInt(st.nextToken());
+                        if (device.getGame().hasValue(key)) {
+                            System.err.println("The system already has a value for: " 
+                                + key);
+                        } else {
+                            device.addNewResource(key, value);
+                        }
+                    } catch (NoSuchElementException nsee) {
+                        System.err.println("usage: new <resource_name>|<value>");
+                    } catch (NumberFormatException nfe) {
+                        System.err.println("value must be numerical");
+                    }
+                
+                /* resources */
+                
+                } else if (command.startsWith("resources")) {
+                    HashMap<String, Integer> values = device.getGame().getValues();
+                    if (values.isEmpty()) {
+                        System.out.println("Resources list is empty.");
+                    } else for (String key : values.keySet()) {
+                        String entry = key + ":" + values.get(key);
+                        HashMap<String, ResourceState> locks = device.getGame().getLocks();
+                        try {
+                            entry += ":" + locks.get(key).getState();
+                        } catch (NullPointerException npe) {
+                            entry += ":LOCK_NOT_INITIALIZED";
+                        }
+                        System.out.println(entry);
+                    }
+                            
+                /* exit */
+                
                 } else if (command.equals("exit")) {
                     device.sayGoodbye();
                     t.interrupt();
                     break;
                 } else {
-                    System.out.println("Not a valid command:\npeerlist\nexit");
+                    System.out.println("Not a valid command:\npeerlist\nexit\n"
+                        + "new\nresources");
                 }
             } catch (IOException ioe) {
                 System.out.println("IOException while reading line: " 
@@ -143,6 +168,42 @@ public class Device implements Runnable {
         this.game = new Game();
         this.peers = new ArrayList<RemoteDevice>();
         this.messageId = 0;
+    }
+    
+    /**
+     * Establishes the P2P connection with the tracker specified.
+     * @param serverIP The ip address of the tracker.
+     * @throws UnknownHostException If the tracker can't be found
+     * @throws IOException If an IOException occurs in the communication
+     */
+    public void establishConnection(String serverIP) 
+            throws UnknownHostException, IOException {
+        
+        Socket tracker = new Socket(serverIP, 12345);
+        DataInputStream in = new DataInputStream(tracker.getInputStream());
+        DataOutputStream out =new DataOutputStream(tracker.getOutputStream());
+
+        /* Create a new listening socket from the ephemeral (random) port list */
+        int port = this.setListener(0);
+        out.writeInt(port);
+
+        /* Read the id given and peer list */
+        this.setId(in.readInt());
+        boolean morePeers = in.readBoolean();
+        while (morePeers) {
+            RemoteDevice peer = new RemoteDevice(in.readInt(), 
+                in.readUTF(), in.readInt());
+            this.getPeers().add(peer);
+            morePeers = in.readBoolean();
+        }
+
+        try {
+            tracker.close();
+        } catch (IOException ioe) {
+            System.err.println("IOException while closing tracker "
+                + ioe.getMessage());
+        }
+        
     }
     
     /**
@@ -248,6 +309,17 @@ public class Device implements Runnable {
                 peers.add(peer);
         } else if (m.getHeader().equals("goodbye")) {
             peers.remove(peer);
+        } else if (m.getHeader().equals("new_resource")) {
+            StringTokenizer st = new StringTokenizer(m.getMessage(), "|");
+            try {
+                String key = st.nextToken();
+                getGame().setValue(key, Integer.parseInt(st.nextToken()));
+                getGame().initLock(key);
+            } catch (NoSuchElementException nsee) {
+                System.err.println("Incorrect format for new resource.");
+            } catch (NumberFormatException nfe) {
+                System.err.println("Incorrect format for new resource.");
+            }
         }
     }
     
@@ -289,6 +361,22 @@ public class Device implements Runnable {
             send(new Message(peer, header, message));
         }
     }
+    
+    /**
+     * Adds a new resource to the game, and sends the key and value to the
+     * rest of the peers. The message has the header 'new_resource'.
+     * @param key
+     * @param value 
+     */
+    public void addNewResource(String key, int value) {
+        getGame().setValue(key, value);
+        getGame().initLock(key);
+        String header = "new_resource";
+        String message = key + "|" + value;
+        for (RemoteDevice peer : peers) {
+            send(new Message(peer, header, message));
+        }
+    }
 
     /**
      * @return the peers
@@ -316,5 +404,12 @@ public class Device implements Runnable {
         }
         
         return null;
+    }
+
+    /**
+     * @return the game
+     */
+    public Game getGame() {
+        return game;
     }
 }
