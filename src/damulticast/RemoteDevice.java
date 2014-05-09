@@ -16,6 +16,10 @@ public class RemoteDevice {
         this.ipAddress = ipAddress;
         this.port = port;
     }
+    
+    public RemoteDevice(int id) {
+        this.id = id;
+    }
     /**
      * @return the id
      */

@@ -13,6 +13,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
@@ -185,11 +186,20 @@ public class Device implements Runnable {
             + ":" + m.getMessage());
         
         /* Message handlers for every type of message */
+        
+        /* hello */
+        
         if (m.getHeader().equals("hello")) {
             if (!peers.contains(peer))
                 peers.add(peer);
+        
+        /* goodbye */
+        
         } else if (m.getHeader().equals("goodbye")) {
             peers.remove(peer);
+        
+        /* new_resource */
+        
         } else if (m.getHeader().equals("new_resource")) {
             StringTokenizer st = new StringTokenizer(m.getMessage(), "|");
             try {
@@ -200,6 +210,62 @@ public class Device implements Runnable {
                 System.err.println("Incorrect format for new resource.");
             } catch (NumberFormatException nfe) {
                 System.err.println("Incorrect format for new resource.");
+            }
+        
+        /* lock_resource */
+        
+        } else if (m.getHeader().equals("lock_resource")) {
+            StringTokenizer st = new StringTokenizer(m.getMessage(), "|");
+            try {
+                String key = st.nextToken();
+                ResourceState lock = sharedResources.getLock(key);
+                /* Parse the timestamps */
+                Calendar ct = Calendar.getInstance();
+                ct.setTimeInMillis(Long.parseLong(st.nextToken()));
+                long t = ct.getTimeInMillis();
+                Calendar ctj = Calendar.getInstance();    
+                /* We get our own timestamp just if we are going to use it */
+                if (lock.getState().equals("HELD") || lock.getState().equals("WANTED")) {                    
+                    ResourceRequest myRequest = lock.getRequester(-1);
+                    ctj.setTimeInMillis(myRequest.getTimestamp());
+                }
+                long tj = ctj.getTimeInMillis();
+                    
+                
+                if (lock == null) {
+                    /* TODO: This shouldn't happen */
+                    System.err.println("Resource does not exist: " + key);
+                } else if (lock.getState().equals("HELD") 
+                        || (lock.getState().equals("WANTED") && (tj < t))) {
+                    lock.getRequestQueue().add(new ResourceRequest(peer, t));
+                } else {
+                    Message reply = new Message(peer, "lock_ack", key);
+                    send(reply);
+                }
+            } catch (NoSuchElementException nsee) {
+                System.err.println("Incorrect format for lock resource.");
+            } catch (NumberFormatException nfe) {
+                System.err.println("Incorrect format for lock resource.");
+            }
+        
+        /* lock_ack */
+        
+        } else if (m.getHeader().equals("lock_ack")) {
+            
+            String key = m.getMessage();
+            
+            /* Update the number of replies received */       
+            ResourceState lock = sharedResources.getLock(key);
+            lock.setAcks(lock.getAcks() + 1);
+            /* If we have received acks from all peers */
+            if (lock.getAcks() == peers.size()) {
+                lock.setState("HELD");
+                /* This is the "alert" when we finally have the resource locked
+                 * in the case of the real application it could initiated a new thread
+                 * and call a listener method in the game that will execute some
+                 * code.
+                 */
+                System.out.println("Resource held " + key + "! :) ");
             }
         }
     }
@@ -254,6 +320,38 @@ public class Device implements Runnable {
         getSharedResources().initLock(key);
         String header = "new_resource";
         String message = key + "|" + value;
+        for (RemoteDevice peer : peers) {
+            send(new Message(peer, header, message));
+        }
+    }
+    
+    /**
+     * Initiates the lock procedure for a resource. It will change the state to
+     * WANTED and will send the respective messages to the peers. This method will
+     * be asynchronous, so it will not wait until it gets the resource held. The
+     * device will receive an alert that all peers have replied via another message.
+     * If the device has requested it before or it is held by the device, it will
+     * return an exception as well.
+     * The message has the header 'lock_resource'.
+     * @param key
+     * @throws NullPointerException If the resource does not exist, or it has been
+     * requested by the device already.
+     */
+    public void lockResource(String key) throws NullPointerException {
+        ResourceState lock = getSharedResources().getLock(key);
+        if (lock == null) {
+            throw new NullPointerException("Resource does not exist: " + key);
+        } else if (lock.getState().equals("WANTED") || lock.getState().equals("HELD")) {
+            throw new NullPointerException("The resource has been requested already.");
+        }
+        Calendar timestamp = Calendar.getInstance();
+        lock.setState("WANTED");
+        /* We add ourselves to the list just to keep track of timestamp */
+        RemoteDevice thisDevice = new RemoteDevice(-1);
+        lock.getRequestQueue().add(new ResourceRequest(thisDevice, timestamp.getTimeInMillis()));
+        
+        String header = "lock_resource";
+        String message = key + "|" + timestamp.getTimeInMillis();
         for (RemoteDevice peer : peers) {
             send(new Message(peer, header, message));
         }

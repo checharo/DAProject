@@ -126,6 +126,28 @@ public class Device_Main {
                         System.out.println(entry);
                     }
                             
+                /* lock */
+                
+                } else if (command.startsWith("lock")) {
+                    HashMap<String, Integer> values = device.getSharedResources().getValues();
+                    StringTokenizer st = new StringTokenizer(command, " ");
+                    st.nextToken();
+                    try {
+                        String key = st.nextToken();
+                        if (device.getSharedResources().hasValue(key)) {
+                            device.lockResource(key);
+                        } else {                           
+                            System.err.println("Resource not found: " 
+                                + key);
+                        }
+                    } catch (NoSuchElementException nsee) {
+                        System.err.println("usage: lock <resource_name>|<value>");
+                    } catch (NullPointerException npe) {
+                        /* Resource was wanted or held already, or does not exist */
+                        System.err.println(npe.getMessage());
+                    }
+                      
+                            
                 /* exit */
                 
                 } else if (command.equals("exit")) {
@@ -134,7 +156,7 @@ public class Device_Main {
                     break;
                 } else {
                     System.out.println("Not a valid command:\npeerlist\nexit\n"
-                        + "new\nresources");
+                        + "new\nresources\nlock");
                 }
             } catch (IOException ioe) {
                 System.out.println("IOException while reading line: " 
