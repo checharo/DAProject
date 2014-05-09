@@ -1,11 +1,13 @@
 package damulticast;
 
-
 import java.util.HashMap;
 
-
 /**
- *
+ * Contains the keys and values of the shared resources in the P2P network. 
+ * It also contains the resource state for the locks for each resource. For the
+ * time being the shared resources are just values in a hashmap, identified by
+ * a key (String). The lock and its state are encapsulated in a ResourceState
+ * object.
  * @author cesar
  */
 public class SharedResources {

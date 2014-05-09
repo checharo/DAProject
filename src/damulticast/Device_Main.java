@@ -56,7 +56,7 @@ public class Device_Main {
             try {
                 String command = stdIn.readLine();
                 
-                /* peerlist */
+                /* peerlist, prints the peerlist on screen */
                 
                 if (command.equals("peerlist")) {
                     if (device.getPeers().isEmpty())
@@ -66,7 +66,7 @@ public class Device_Main {
                             + peer.getIpAddress() + ":" + peer.getPort());
                     }
                 
-                /* send */
+                /* send, sends a customized message to the peers */
                 
                 } else if (command.startsWith("send")) {
                     StringTokenizer st = new StringTokenizer(command, " ");
@@ -88,7 +88,7 @@ public class Device_Main {
                         System.err.println("peer id must be numerical");
                     }
                 
-                /* new */
+                /* new, sends a message notifying of a new shared resource */
                 
                 } else if (command.startsWith("new")) {
                     StringTokenizer st = new StringTokenizer(command, " ");
@@ -109,7 +109,8 @@ public class Device_Main {
                         System.err.println("value must be numerical");
                     }
                 
-                /* resources */
+                /* resources, prints a list of the shared resources and their 
+                 * state IN THIS DEVICE */
                 
                 } else if (command.startsWith("resources")) {
                     HashMap<String, Integer> values = device.getSharedResources().getValues();
@@ -126,7 +127,7 @@ public class Device_Main {
                         System.out.println(entry);
                     }
                             
-                /* lock */
+                /* lock, initiates the lock procedure for a shared resource */
                 
                 } else if (command.startsWith("lock")) {
                     HashMap<String, Integer> values = device.getSharedResources().getValues();
@@ -146,9 +147,30 @@ public class Device_Main {
                         /* Resource was wanted or held already, or does not exist */
                         System.err.println(npe.getMessage());
                     }
-                      
                             
-                /* exit */
+                /* release, releases the lock for this resource and processes 
+                 * the request queue */
+                
+                } else if (command.startsWith("release")) {
+                    HashMap<String, Integer> values = device.getSharedResources().getValues();
+                    StringTokenizer st = new StringTokenizer(command, " ");
+                    st.nextToken();
+                    try {
+                        String key = st.nextToken();
+                        if (device.getSharedResources().hasValue(key)) {
+                            device.releaseResource(key);
+                        } else {                           
+                            System.err.println("Resource not found: " 
+                                + key);
+                        }
+                    } catch (NoSuchElementException nsee) {
+                        System.err.println("usage: release <resource_name>");
+                    } catch (NullPointerException npe) {
+                        /* Resource was wanted or held already, or does not exist */
+                        System.err.println(npe.getMessage());
+                    }
+                            
+                /* exit, exits the P2P interaction */
                 
                 } else if (command.equals("exit")) {
                     device.sayGoodbye();
@@ -156,7 +178,7 @@ public class Device_Main {
                     break;
                 } else {
                     System.out.println("Not a valid command:\npeerlist\nexit\n"
-                        + "new\nresources\nlock");
+                        + "new\nresources\nlock\nrelease");
                 }
             } catch (IOException ioe) {
                 System.out.println("IOException while reading line: " 

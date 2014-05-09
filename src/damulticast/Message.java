@@ -2,25 +2,31 @@
 package damulticast;
 
 /**
- *
+ * Encapsulates messages exchanged between the P2P peers. Each message has an id
+ * associated with the peer (each peer has its own counter). The header is used
+ * for a receiver to know how to process the message.
  * @author cesar
  */
 public class Message {
     
+    /** The id of the message with respect of this peer */
     private int id;
-    private RemoteDevice sender;
+    /** Contains the id of the peer of the message, or the receiver if sending */
+    private RemoteDevice peer;
+    /** Contains the header of the message */
     private String header;
+    /** Contains the content of the message */
     private String message;
 
-    public Message(RemoteDevice sender, String header, String message) {
-        this.sender = sender;
+    public Message(RemoteDevice peer, String header, String message) {
+        this.peer = peer;
         this.header = header;
         this.message = message;
     }
     
-    public Message(int id, RemoteDevice sender, String header, String message) {
+    public Message(int id, RemoteDevice peer, String header, String message) {
         this.id = id;
-        this.sender = sender;
+        this.peer = peer;
         this.header = header;
         this.message = message;
     }
@@ -42,15 +48,15 @@ public class Message {
     /**
      * @return the senderId
      */
-    public RemoteDevice getSender() {
-        return sender;
+    public RemoteDevice getPeer() {
+        return peer;
     }
 
     /**
      * @param senderId the senderId to set
      */
     public void setSenderId(RemoteDevice sender) {
-        this.sender = sender;
+        this.peer = sender;
     }
 
     /**
@@ -81,6 +87,12 @@ public class Message {
         this.message = message;
     }
 
+    /**
+     * Equals method. A message will be equal to another just if the id and 
+     * sender are the same.
+     * @param obj
+     * @return 
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == null) {
@@ -93,7 +105,7 @@ public class Message {
         if (this.id != other.id) {
             return false;
         }
-        if (!this.sender.equals(other.getSender())) {
+        if (!this.peer.equals(other.getPeer())) {
             return false;
         }
         return true;
@@ -101,7 +113,8 @@ public class Message {
 
     @Override
     public String toString() {
-        return "Message{" + "id=" + id + ", sender=" + sender.getId()+ ", header=" + header + ", message=" + message + '}';
+        return "Message{" + "id=" + id + ", peer=" + peer.getId()+ ", header=" 
+            + header + ", message=" + message + '}';
     }
     
 }

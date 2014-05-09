@@ -12,11 +12,15 @@ import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 
 /**
- *
+ * Class that implements the tracker of the P2P network. The tracker's sole purpose
+ * is to initialize the peer list in every device joining the P2P network. Once
+ * this is done, it closes the connection. This is the only process that will 
+ * listen on a fixed port (12345), the rest of the ports will be ephemeral.
  * @author cesar
  */
 public class Tracker implements Runnable {
     
+    /** Stores the list of peers in the network */
     private ArrayList<RemoteDevice> peers;
     
     /**
@@ -34,6 +38,10 @@ public class Tracker implements Runnable {
         this.peers = new ArrayList<RemoteDevice>();
     }
     
+    /**
+     * The listen method for the servicing new peers. 
+     * @throws IOException In case an unexpected error happens while reading connections
+     */
     public void listen() throws IOException {
         int serverPort = 12345;
         int id = 0;
@@ -76,23 +84,6 @@ public class Tracker implements Runnable {
             }
         }
     }
-
-    /*
-    /**
-     * Checks whether a port has been used by a previous peer.
-     * @param port The port to query
-     * @return true if it has been used, false otherwise
-     * This method has been commented since this actions seems unnecessary
-    public boolean portIsAssigned(int port) {
-        
-        for (RemoteDevice rd : peers) {
-            if (rd.getPort() == port)
-                return true;
-        }
-        
-        return false;
-    }
-    */ 
 
     /**
      * @return the peers

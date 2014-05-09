@@ -26,12 +26,15 @@ import java.util.StringTokenizer;
  */
 public class Device implements Runnable {
     
+    /** The id of the device */
     private int id;
+    /** The class that keeps the state of shared resources */
     private SharedResources sharedResources;
+    /** The peer list */
     private ArrayList<RemoteDevice> peers;
-    /* Socket that will use for incoming P2P messages */
+    /** Socket that will use for incoming P2P messages */
     private ServerSocket serverSocket;
-    /* Message id counter */
+    /** A counter for the id of outcoming messages */
     private int messageId;
     
     /**
@@ -92,7 +95,7 @@ public class Device implements Runnable {
      * The listen method for the devices. The devices will expect incoming messages
      * one by one, and will process them as they come. There will be no separate
      * threads for receiving and processing since there will be a timeout to process
-     * the incoming messages.
+     * the incoming messages. 
      * The logic for handling the messages is in the receiveMessage method. This
      * method should not be edited anymore.
      * @throws IOException In case an unexpected error happens while reading connections
@@ -140,7 +143,7 @@ public class Device implements Runnable {
      */
     public synchronized void send(Message m) {
         
-        RemoteDevice peer = m.getSender();
+        RemoteDevice peer = m.getPeer();
         
         try {
             Socket peerSocket = new Socket();
@@ -181,7 +184,7 @@ public class Device implements Runnable {
      */
     public synchronized void receiveMessage(Message m) {
         
-        RemoteDevice peer = m.getSender();
+        RemoteDevice peer = m.getPeer();
         System.out.println(peer.getId() + "> " + m.getId() + ":" + m.getHeader() 
             + ":" + m.getMessage());
         
@@ -230,8 +233,7 @@ public class Device implements Runnable {
                     ctj.setTimeInMillis(myRequest.getTimestamp());
                 }
                 long tj = ctj.getTimeInMillis();
-                    
-                
+                                
                 if (lock == null) {
                     /* TODO: This shouldn't happen */
                     System.err.println("Resource does not exist: " + key);
@@ -261,9 +263,9 @@ public class Device implements Runnable {
             if (lock.getAcks() == peers.size()) {
                 lock.setState("HELD");
                 /* This is the "alert" when we finally have the resource locked
-                 * in the case of the real application it could initiated a new thread
-                 * and call a listener method in the game that will execute some
-                 * code.
+                 * in the case of the real application it could instead 
+                 * initiate a new thread and call a listener method in the game 
+                 * that will execute some code.
                  */
                 System.out.println("Resource held " + key + "! :) ");
             }
@@ -310,10 +312,10 @@ public class Device implements Runnable {
     }
     
     /**
-     * Adds a new resource to the game, and sends the key and value to the
+     * Adds a new shared resource, and sends the key and value to the
      * rest of the peers. The message has the header 'new_resource'.
-     * @param key
-     * @param value 
+     * @param key The id for the resource
+     * @param value The value associated with it
      */
     public void addNewResource(String key, int value) {
         getSharedResources().setValue(key, value);
@@ -333,7 +335,7 @@ public class Device implements Runnable {
      * If the device has requested it before or it is held by the device, it will
      * return an exception as well.
      * The message has the header 'lock_resource'.
-     * @param key
+     * @param key The id of the resource
      * @throws NullPointerException If the resource does not exist, or it has been
      * requested by the device already.
      */
@@ -354,6 +356,36 @@ public class Device implements Runnable {
         String message = key + "|" + timestamp.getTimeInMillis();
         for (RemoteDevice peer : peers) {
             send(new Message(peer, header, message));
+        }
+    }
+    
+    /**
+     * Initiates the release procedure for a resource. It will change the state to
+     * RELEASED and will process the request queue in case there are others waiting
+     * for the lock. If the resource was not held, or if the resource does not exist
+     * it will throw an Exception.
+     * The message has the header 'release_resource'.
+     * @param key The id of the resource
+     * @throws NullPointerException If the resource does not exist, or it is not
+     * held by the device.
+     */
+    public void releaseResource(String key) throws NullPointerException {
+        ResourceState lock = getSharedResources().getLock(key);
+        if (lock == null) {
+            throw new NullPointerException("Resource does not exist: " + key);
+        } else if (!lock.getState().equals("HELD")) {
+            throw new NullPointerException("The resource is not being held.");
+        }
+        
+        lock.setState("RELEASED");
+        lock.setAcks(0);
+        /* We remove ourselves from the queue and send pending replies */
+        ArrayList<ResourceRequest> locks = lock.getRequestQueue();
+        locks.remove(0);
+        while (!locks.isEmpty()) {
+            ResourceRequest req = locks.remove(0);
+            Message reply = new Message(req.getRequester(), "lock_ack", key);
+            send(reply);
         }
     }
 

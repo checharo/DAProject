@@ -2,13 +2,16 @@
 package damulticast;
 
 /**
- *
+ * Contains the reference to a peer in the P2P network.
  * @author cesar
  */
 public class RemoteDevice {
     
+    /** The id of the peer */
     private int id;
+    /** The ip address of the peer */
     private String ipAddress;
+    /** The port in which the peer listens */
     private int port;
 
     public RemoteDevice(int id, String ipAddress, int port) {
@@ -62,6 +65,11 @@ public class RemoteDevice {
         this.port = port;
     }
 
+    /**
+     * Equals method. One peer will be equal to another if their id is equal.
+     * @param obj
+     * @return 
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == null) {
