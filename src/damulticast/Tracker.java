@@ -19,39 +19,9 @@ public class Tracker implements Runnable {
     
     private ArrayList<RemoteDevice> peers;
     
-    public static void main(String args[]) {
-        
-        Tracker tracker = new Tracker();
-        Thread t = new Thread(tracker);
-        t.start();
-        
-        BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
-        while (true) {
-            System.out.print("tracker> ");
-            try {
-                String command = stdIn.readLine();
-                if (command.equals("peerlist")) {
-                    if (tracker.getPeers().isEmpty())
-                        System.out.println("Peerlist empty");
-                    else for (RemoteDevice peer : tracker.getPeers()) {
-                        System.out.println(peer.getId() + " -> " 
-                            + peer.getIpAddress() + ":" + peer.getPort());
-                    }
-                } else if (command.equals("exit")) {
-                    t.interrupt();
-                    break;
-                } else {
-                    System.out.println("Not a valid command:\npeerlist\nexit");
-                }
-            } catch (IOException ioe) {
-                System.out.println("IOException while reading line: " 
-                    + ioe.getMessage());
-            }
-        }
-        
-        System.exit(0);
-    }
-    
+    /**
+     * Listening thread for new peers. 
+     */
     public void run() {
         try {
             this.listen();

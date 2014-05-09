@@ -8,12 +8,12 @@ import java.util.HashMap;
  *
  * @author cesar
  */
-public class Game {
+public class SharedResources {
    
     private HashMap<String, Integer> values;
     private HashMap<String, ResourceState> locks;
     
-    public Game() {
+    public SharedResources() {
         values = new HashMap();
         locks = new HashMap();
     }
