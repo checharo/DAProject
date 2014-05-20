@@ -114,6 +114,11 @@ public class Device implements Runnable {
                 int port = in.readInt();
                 RemoteDevice sender = lookUpPeer(senderId);
                 
+                /* If the sender is the tracker */
+                if (senderId == -2) {
+                    sender = new RemoteDevice(-2, 
+                            peerSocket.getInetAddress().getHostAddress(), port);
+                }
                 /* If peer is not found, add it to the list */
                 if (sender == null) {
                     sender = new RemoteDevice(senderId, 
@@ -185,8 +190,11 @@ public class Device implements Runnable {
     public synchronized void receiveMessage(Message m) {
         
         RemoteDevice peer = m.getPeer();
-        System.out.println(peer.getId() + "> " + m.getId() + ":" + m.getHeader() 
-            + ":" + m.getMessage());
+        /* Debug */
+        if (!m.getHeader().equals("ping")) {
+            System.out.println(peer.getId() + "> " + m.getId() + ":" + m.getHeader() 
+                + ":" + m.getMessage());
+        }
         
         /* Message handlers for every type of message */
         
@@ -269,6 +277,12 @@ public class Device implements Runnable {
                  */
                 System.out.println("Resource held " + key + "! :) ");
             }
+     
+        /* ping */
+        
+        } else if (m.getHeader().equals("ping")) {
+            /* For the moment the message is just ignored */
+            ;
         }
     }
     

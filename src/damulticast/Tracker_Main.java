@@ -16,6 +16,9 @@ public class Tracker_Main {
         Tracker tracker = new Tracker();
         Thread t = new Thread(tracker);
         t.start();
+        KeepAliver keepAliver = new KeepAliver(tracker);
+        Thread tKA = new Thread(keepAliver);
+        tKA.start();
         
         BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
         while (true) {

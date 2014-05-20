@@ -6,9 +6,11 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 
 /**
@@ -22,11 +24,14 @@ public class Tracker implements Runnable {
     
     /** Stores the list of peers in the network */
     private ArrayList<RemoteDevice> peers;
+    /** Stores the server port for the tracker */
+    public static final int serverPort = 12345;
     
     /**
      * Listening thread for new peers. 
      */
     public void run() {
+        
         try {
             this.listen();
         } catch (IOException ioe) {
@@ -43,7 +48,6 @@ public class Tracker implements Runnable {
      * @throws IOException In case an unexpected error happens while reading connections
      */
     public void listen() throws IOException {
-        int serverPort = 12345;
         int id = 0;
         ServerSocket listenSocket = new ServerSocket(serverPort);
         while(true) {
@@ -63,7 +67,8 @@ public class Tracker implements Runnable {
                 RemoteDevice newClient = new RemoteDevice(id, ipAddress, assignedPort);
                 
                 /* Send the peer list */
-                for (RemoteDevice peer : getPeers()) {
+                ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
+                for (RemoteDevice peer : peersCopy) {
                     out.writeBoolean(true);
                     out.writeInt(peer.getId());
                     out.writeUTF(peer.getIpAddress());
@@ -82,6 +87,46 @@ public class Tracker implements Runnable {
             } finally {
                 clientSocket.close();
             }
+        }
+    }
+    
+    /**
+     * Pings a peer to test if it's still alive
+     * @throws IOException In case an unexpected error happens while reading connections
+     */
+    public void ping(RemoteDevice peer) throws IOException {
+        
+        try {
+            Socket peerSocket = new Socket();
+            peerSocket.connect(new InetSocketAddress(peer.getIpAddress(), 
+                peer.getPort()), 5000);
+            
+            DataInputStream in = new DataInputStream(peerSocket.getInputStream());
+            DataOutputStream out =new DataOutputStream(peerSocket.getOutputStream());
+            
+            /* The tracker will use the special ID -2 */
+            out.writeInt(-2);
+            out.writeInt(serverPort);
+            
+            out.writeInt(0);
+            out.writeUTF("ping");
+            out.writeUTF("pong");
+            
+            try {
+                peerSocket.close();
+            } catch (IOException ioe) {
+                System.err.println("IOException while closing peer "
+                    + ioe.getMessage());
+            }
+        /* The peer appears to be disconnected, remove it from the peerlist */    
+        } catch (SocketTimeoutException ste) {
+            System.out.println("Peer " + peer.getId() + " is no longer responding.");
+            peers.remove(peer);
+        } catch (UnknownHostException uhe) {
+            System.err.println("Unknown host: " + peer.getIpAddress());
+        } catch (IOException ioe) {
+            System.out.println("Peer " + peer.getId() + " is no longer responding.");
+            peers.remove(peer);
         }
     }
 
