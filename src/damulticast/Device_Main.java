@@ -28,6 +28,7 @@ public class Device_Main {
         }
         
         String serverIP = args[0];
+        serverIP="localhost";
         Device device = new Device();
         
         /* Establish the connection with tracker */
