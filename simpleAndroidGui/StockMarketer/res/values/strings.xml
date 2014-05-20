@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">StockMarketer</string>
+    
+    <string name="peerlist">peerlist</string>
+    <string name="join">join</string>
+    
+    
+    <string name="myip">myip</string>
+    <string name="lock">lock</string>
+    <string name="release">release</string>
+    <string name="exit">exit</string>
+    
+    <string name="hello">hello</string>
+    <string name="send">send</string>
+    <string name="newitem">newitem</string>
+    <string name="resources">resources</string>
+    
+    
+    <string name="action_settings">Settings</string>
+    
+    
+
+</resources>
