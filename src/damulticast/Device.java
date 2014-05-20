@@ -37,6 +37,8 @@ public class Device implements Runnable {
     /** A counter for the id of outcoming messages */
     private int messageId;
     
+    public static final int serverPort = 12345;
+    
     /**
      * Listening thread for incoming messages. 
      */
@@ -64,7 +66,7 @@ public class Device implements Runnable {
     public void establishConnection(String serverIP) 
             throws UnknownHostException, IOException {
         
-        Socket tracker = new Socket(serverIP, 12345);
+        Socket tracker = new Socket(serverIP, serverPort);
         DataInputStream in = new DataInputStream(tracker.getInputStream());
         DataOutputStream out =new DataOutputStream(tracker.getOutputStream());
 

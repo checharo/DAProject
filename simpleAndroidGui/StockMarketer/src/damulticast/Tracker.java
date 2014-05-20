@@ -21,6 +21,8 @@ public class Tracker implements Runnable {
 
 	/** Stores the list of peers in the network */
 	private ArrayList<RemoteDevice> peers;
+        
+        public static final int serverPort = 12345;
 
 	/**
 	 * Listening thread for new peers.
@@ -44,7 +46,6 @@ public class Tracker implements Runnable {
 	 *             In case an unexpected error happens while reading connections
 	 */
 	public void listen() throws IOException {
-		int serverPort = 12345;
 		int id = 0;
 		ServerSocket listenSocket = new ServerSocket(serverPort);
 		while (true) {
