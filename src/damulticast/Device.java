@@ -1,12 +1,9 @@
 
 package damulticast;
 
-import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -36,6 +33,8 @@ public class Device implements Runnable {
     private ServerSocket serverSocket;
     /** A counter for the id of outcoming messages */
     private int messageId;
+    /** A listener for the events in the protocol (the actual program running on a device) */
+    private RicartListener listener;
     
     public static final int serverPort = 12345;
     
@@ -50,11 +49,12 @@ public class Device implements Runnable {
         }
     }
     
-    public Device() {
+    public Device(RicartListener listener) {
         this.id = 0;
         this.sharedResources = new SharedResources();
         this.peers = new ArrayList<RemoteDevice>();
         this.messageId = 0;
+        this.listener = listener;
     }
     
     /**
@@ -97,7 +97,8 @@ public class Device implements Runnable {
      * The listen method for the devices. The devices will expect incoming messages
      * one by one, and will process them as they come. There will be no separate
      * threads for receiving and processing since there will be a timeout to process
-     * the incoming messages. 
+     * the incoming messages. This method should not be called directly by the application
+     * rather, start a new Thread and run it.
      * The logic for handling the messages is in the receiveMessage method. This
      * method should not be edited anymore.
      * @throws IOException In case an unexpected error happens while reading connections
@@ -129,7 +130,15 @@ public class Device implements Runnable {
                 }
                 Message m = new Message(in.readInt(), sender, in.readUTF(), 
                     in.readUTF());
-                receiveMessage(m);    
+                /* If the message is sync then process the reply as soon as possible */
+                if (!m.getHeader().startsWith("sync-")) {
+                    receiveMessage(m);    
+                } else {
+                    Message reply = receiveMessageSync(m);
+                    out.writeInt(id);
+                    out.writeUTF(reply.getHeader());
+                    out.writeUTF(reply.getMessage());
+                }
             } catch (SocketTimeoutException ste) {
                 System.err.println("Socket timeout from peer: "
                     + peerSocket.getInetAddress().getHostAddress());
@@ -145,48 +154,55 @@ public class Device implements Runnable {
     /**
      * The sending method that will execute the instructions necessary for a 
      * message to reach the destination Socket. It's the opposite of the listen()
-     * method. This method should not be edited anymore.
+     * method. It will act asynchronously for all messages, except if they are
+     * prefixed with 'sync-' in the header. 
      * @param m The message to be sent.
+     * @throws SocketTimeoutException If during the communication a message takes
+     * more than 5 seconds to get through.
+     * @throws IOException If an IO error happens during the communication
+     * @throws UnkownHostException This shouldn't happen when using IP addresses.
      */
-    public synchronized void send(Message m) {
+    public synchronized void send(Message m) throws SocketTimeoutException,
+            IOException, UnknownHostException {
         
         RemoteDevice peer = m.getPeer();
+        Message reply = null;
         
+        Socket peerSocket = new Socket();
+        peerSocket.connect(new InetSocketAddress(peer.getIpAddress(), 
+            peer.getPort()), 5000);
+
+        DataInputStream in = new DataInputStream(peerSocket.getInputStream());
+        DataOutputStream out =new DataOutputStream(peerSocket.getOutputStream());
+
+        out.writeInt(id);
+        out.writeInt(serverSocket.getLocalPort());
+
+        messageId++;
+        out.writeInt(messageId);
+        out.writeUTF(m.getHeader());
+        out.writeUTF(m.getMessage());
+        
+        /* If the message is sync, implement the receive instruction */
+        if (m.getHeader().startsWith("sync-")) {
+            int replyID = in.readInt();
+            String replyHeader = in.readUTF();
+            String replyMessage = in.readUTF();
+            receiveMessage(new Message(peer, replyHeader, replyMessage));
+        }
+
         try {
-            Socket peerSocket = new Socket();
-            peerSocket.connect(new InetSocketAddress(peer.getIpAddress(), 
-                peer.getPort()), 5000);
-            
-            DataInputStream in = new DataInputStream(peerSocket.getInputStream());
-            DataOutputStream out =new DataOutputStream(peerSocket.getOutputStream());
-            
-            out.writeInt(id);
-            out.writeInt(serverSocket.getLocalPort());
-            
-            messageId++;
-            out.writeInt(messageId);
-            out.writeUTF(m.getHeader());
-            out.writeUTF(m.getMessage());
-            
-            try {
-                peerSocket.close();
-            } catch (IOException ioe) {
-                System.err.println("IOException while closing peer "
-                    + ioe.getMessage());
-            }
-        } catch (UnknownHostException uhe) {
-            System.err.println("Unknown host: " + peer.getIpAddress());
-            System.exit(1);
+            peerSocket.close();
         } catch (IOException ioe) {
-            System.err.println("IOException while sending P2P message: " 
+            System.err.println("IOException while closing peer "
                 + ioe.getMessage());
-            System.exit(1);
         }
     }
     
     /**
      * Contains the logic to be implemented when a message from a peer is 
-     * received.
+     * received. The receive logic of sync reply messages MUST NOT use the send 
+     * method again, or it will be deadlocked. 
      * @param m The incoming message from the peer;
      */
     public synchronized void receiveMessage(Message m) {
@@ -258,6 +274,15 @@ public class Device implements Runnable {
                 System.err.println("Incorrect format for lock resource.");
             } catch (NumberFormatException nfe) {
                 System.err.println("Incorrect format for lock resource.");
+            } catch (SocketTimeoutException ste) {
+                System.err.println("Timeout for the message: " + m.getId() 
+                    + "." + ste.getMessage());
+            } catch (UnknownHostException uhe) {
+                System.err.println("UHE for message: " + m.getId() 
+                    + "." + uhe.getMessage());
+            } catch (IOException ioe) {
+                System.err.println("IOE for message: " + m.getId() 
+                    + "." + ioe.getMessage());
             }
         
         /* lock_ack */
@@ -272,12 +297,10 @@ public class Device implements Runnable {
             /* If we have received acks from all peers */
             if (lock.getAcks() == peers.size()) {
                 lock.setState("HELD");
-                /* This is the "alert" when we finally have the resource locked
-                 * in the case of the real application it could instead 
-                 * initiate a new thread and call a listener method in the game 
-                 * that will execute some code.
+                /* We send the event to the main device so it knows we have
+                 * held the device.
                  */
-                System.out.println("Resource held " + key + "! :) ");
+                listener.eventListener("Resource held " + key + "! :) ");
             }
      
         /* ping */
@@ -285,6 +308,60 @@ public class Device implements Runnable {
         } else if (m.getHeader().equals("ping")) {
             /* For the moment the message is just ignored */
             ;
+        
+        /* syncreply-askstate */
+        
+        } else if (m.getHeader().equals("syncreply-askstate")) {
+            if (!m.getMessage().equals("")) {
+                StringTokenizer st = new StringTokenizer(m.getMessage(), "&");
+                while (st.hasMoreTokens()) {
+                    StringTokenizer st2 = new StringTokenizer(st.nextToken(), "|");
+                    String key = st2.nextToken();
+                    String value = st2.nextToken();
+                    System.out.println("Adding new resource: " + key + "=" + value);
+                    sharedResources.setValue(key, Integer.parseInt(value));
+                    sharedResources.initLock(key);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Contains the logic to be implemented when a message from a peer is 
+     * received. This method is special for sync replies, since it returns the 
+     * reply rather than calling for the send message again. 
+     * @param m The incoming message from the peer;
+     */
+    public synchronized Message receiveMessageSync(Message m) {
+        
+        RemoteDevice peer = m.getPeer();
+        /* Debug */
+        if (!m.getHeader().equals("ping")) {
+            System.out.println(peer.getId() + "> " + m.getId() + ":" + m.getHeader() 
+                + ":" + m.getMessage());
+        }
+        
+        /* Message handlers for every type of message */
+        
+        /* sync-askstate */
+        
+        if (m.getHeader().equals("sync-askstate")) {
+            /* Update the number of replies received */ 
+            String replyHeader = "syncreply-askstate";
+            String replyMessage = "";
+            HashMap<String, Integer> resources = new HashMap<String, Integer>(sharedResources.getValues());
+            
+            for (String key : resources.keySet()) {
+                replyMessage += key + "|" + resources.get(key) + "&";
+            }
+            if (!replyMessage.equals("")) {
+                replyMessage = replyMessage.substring(0, replyMessage.length() - 1);
+            }
+            
+            
+            return new Message(peer, replyHeader, replyMessage);     
+        } else {
+            return null;
         }
     }
     
@@ -303,27 +380,51 @@ public class Device implements Runnable {
     
     /**
      * Send a message notifying all peers you entered the network.
-     * The message has the header 'hello'.
+     * The message has the header 'hello'. If an Exception occurs while saying
+     * hello to one or many of the peers, it will just print it on the err stream
+     * but will not stop. The recommendation would be to stop the device.
      */
     public void sayHello() {
         
         String header = "hello";
         String message = "";
-        for (RemoteDevice peer : peers) {
+        ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
+        for (RemoteDevice peer : peersCopy) try {
             send(new Message(peer, header, message));
+        } catch (SocketTimeoutException ste) {
+            System.err.println("Timeout when saying hello to: " + peer.getId() 
+                + "." + ste.getMessage());
+        } catch (UnknownHostException uhe) {
+            System.err.println("UHE when saying hello to: " + peer.getId() 
+                + "." + uhe.getMessage());
+        } catch (IOException ioe) {
+            System.err.println("IOE when saying hello to: " + peer.getId() 
+                + "." + ioe.getMessage());
         }
     }
     
     /**
      * Send a message notifying all peers you are exiting the network.
-     * The messages has the header 'goodbye'.
+     * The messages has the header 'goodbye'. If an error happens while saying 
+     * goodbye it will just print it.
      */
-    public void sayGoodbye() {
+    public void sayGoodbye() throws SocketTimeoutException, UnknownHostException, 
+            IOException {
      
         String header = "goodbye";
         String message = "";
-        for (RemoteDevice peer : peers) {
+        ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
+        for (RemoteDevice peer : peersCopy) try {
             send(new Message(peer, header, message));
+        } catch (SocketTimeoutException ste) {
+            System.err.println("Timeout when saying goodbye to: " + peer.getId() 
+                + "." + ste.getMessage());
+        } catch (UnknownHostException uhe) {
+            System.err.println("UHE when saying goodbye to: " + peer.getId() 
+                + "." + uhe.getMessage());
+        } catch (IOException ioe) {
+            System.err.println("IOE when saying goodbye to: " + peer.getId() 
+                + "." + ioe.getMessage());
         }
     }
     
@@ -338,8 +439,18 @@ public class Device implements Runnable {
         getSharedResources().initLock(key);
         String header = "new_resource";
         String message = key + "|" + value;
-        for (RemoteDevice peer : peers) {
+        ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
+        for (RemoteDevice peer : peersCopy) try {
             send(new Message(peer, header, message));
+        } catch (SocketTimeoutException ste) {
+            System.err.println("Timeout notifying new resource to: " + peer.getId() 
+                + "." + ste.getMessage());
+        } catch (UnknownHostException uhe) {
+            System.err.println("UHE notifying new resource to: " + peer.getId() 
+                + "." + uhe.getMessage());
+        } catch (IOException ioe) {
+            System.err.println("IOE notifying new resource to: " + peer.getId() 
+                + "." + ioe.getMessage());
         }
     }
     
@@ -354,8 +465,14 @@ public class Device implements Runnable {
      * @param key The id of the resource
      * @throws NullPointerException If the resource does not exist, or it has been
      * requested by the device already.
+     * @throws SocketTimeoutException If during the communication a message takes
+     * more than 5 seconds to get through.
+     * @throws IOException If an IO error happens during the communication
+     * @throws UnkownHostException This shouldn't happen when using IP addresses.
+     * 
      */
-    public void lockResource(String key) throws NullPointerException {
+    public void lockResource(String key) throws NullPointerException, 
+            SocketTimeoutException, UnknownHostException, IOException {
         ResourceState lock = getSharedResources().getLock(key);
         if (lock == null) {
             throw new NullPointerException("Resource does not exist: " + key);
@@ -370,7 +487,8 @@ public class Device implements Runnable {
         
         String header = "lock_resource";
         String message = key + "|" + timestamp.getTimeInMillis();
-        for (RemoteDevice peer : peers) {
+        ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
+        for (RemoteDevice peer : peersCopy) {
             send(new Message(peer, header, message));
         }
     }
@@ -384,8 +502,13 @@ public class Device implements Runnable {
      * @param key The id of the resource
      * @throws NullPointerException If the resource does not exist, or it is not
      * held by the device.
+     * @throws SocketTimeoutException If during the communication a message takes
+     * more than 5 seconds to get through.
+     * @throws IOException If an IO error happens during the communication
+     * @throws UnkownHostException This shouldn't happen when using IP addresses.
      */
-    public void releaseResource(String key) throws NullPointerException {
+    public void releaseResource(String key) throws NullPointerException, 
+            SocketTimeoutException, UnknownHostException, IOException {
         ResourceState lock = getSharedResources().getLock(key);
         if (lock == null) {
             throw new NullPointerException("Resource does not exist: " + key);
@@ -402,6 +525,45 @@ public class Device implements Runnable {
             ResourceRequest req = locks.remove(0);
             Message reply = new Message(req.getRequester(), "lock_ack", key);
             send(reply);
+        }
+    }
+    
+    /**
+     * Asks for the state of the game to one of the peers. If a peer does not 
+     * respond it tries with the next one. If all the peers don't respond the
+     * the corresponding exception is thrown.
+     * @throws SocketTimeoutException If all peers timeout.
+     * @throws IOException If communication with all peers fail.
+     */
+    public void askForState() throws SocketTimeoutException, IOException {
+        
+        /* Ask the game's state to the peers synchronously until one of them 
+         * replies. If a peer doesn't reply get him out of the peerlist */
+        String header = "sync-askstate";
+        String message = "";
+        ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
+        for (RemoteDevice peer : peersCopy) {
+            try {
+                send(new Message(peer, header, message));
+                /* As soon as we receive a succesful reply, break */
+                 break;
+            } catch (SocketTimeoutException ste) {
+                System.err.println("Peer " + peer.getId() + " is not responding"
+                    + " it will be disconnected");
+                peers.remove(peer);
+                /* If it's the last peer throw the exception */
+                if (peers.isEmpty()) {
+                    throw ste;
+                }
+            } catch (IOException ioe) {
+                System.err.println("Peer " + peer.getId() + " is not responding"
+                    + " it will be disconnected");
+                peers.remove(peer);
+                /* If it's the last peer throw the exception */
+                if (peers.isEmpty()) {
+                    throw ioe;
+                }
+            }
         }
     }
 
@@ -425,7 +587,8 @@ public class Device implements Runnable {
      * @return The peer object, null if not found.
      */
     public RemoteDevice lookUpPeer(int id) {
-        for (RemoteDevice peer : peers) {
+        ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
+        for (RemoteDevice peer : peersCopy) {
             if (peer.getId() == id)
                 return peer;
         }
