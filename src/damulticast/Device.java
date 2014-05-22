@@ -104,7 +104,7 @@ public class Device implements Runnable {
      * method should not be edited anymore.
      * @throws IOException In case an unexpected error happens while reading connections
      */
-    public void listen() throws IOException {
+    private void listen() throws IOException {
         
         while(true) {
             Socket peerSocket = serverSocket.accept();
@@ -301,11 +301,17 @@ public class Device implements Runnable {
                 listener.lockGranted(key);
             }
      
-        /* ping 
+        /* ping, the pings include the list of peers the tracker considers have
+         * disconnected */
         
         } else if (m.getHeader().equals("ping")) {
-            /* For the moment the message is just ignored 
-            ;
+            
+            StringTokenizer st = new StringTokenizer(m.getMessage(), "|");
+            while (st.hasMoreTokens()) {
+                RemoteDevice dpeer = lookUpPeer(Integer.parseInt(st.nextToken()));
+                peers.remove(dpeer);
+                System.err.println("Tracker has dismissed peer " + dpeer.getId());
+            }
         
         /* reply-askstate */
         
@@ -515,12 +521,19 @@ public class Device implements Runnable {
         String header = "lock_resource";
         String message = key + "|" + timestamp.getTimeInMillis();
         ArrayList<RemoteDevice> peersCopy = new ArrayList<RemoteDevice>(peers);
-        for (RemoteDevice peer : peersCopy) {
+        
+        /* If peers copy is emtpy grant the lock right away */
+        if (peersCopy.isEmpty()) {
+            lock.setState("HELD");
+            listener.lockGranted(key);
+        } else for (RemoteDevice peer : peersCopy) {
             try {
                 send(new Message(peer, header, message));
             } catch (IOException ioe) {
                 System.err.println("Could not reach peer: " + peer.getId() + ", "
                         + ioe.getMessage());
+                /* The algorithm will ignore the peer for the voting */
+                lock.setAcks(lock.getAcks() + 1);
             }
         }
     }

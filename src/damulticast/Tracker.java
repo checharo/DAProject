@@ -24,6 +24,10 @@ public class Tracker implements Runnable {
     private ArrayList<RemoteDevice> peers;
     /** Stores the server port for the tracker */
     public static final int serverPort = 12345;
+    /** Stores the devices that the tracker has removed */
+    public ArrayList<RemoteDevice> disPeers;
+    /** Stores the amount of peers that have been notified of disconnected peers */
+    public int notPeers;
     
     /**
      * Listening thread for new peers. 
@@ -40,6 +44,8 @@ public class Tracker implements Runnable {
     
     public Tracker() {
         this.peers = new ArrayList<RemoteDevice>();
+        this.disPeers = new ArrayList<RemoteDevice>();
+        this.notPeers = 0;
     }
     
     /**
@@ -90,7 +96,8 @@ public class Tracker implements Runnable {
     }
     
     /**
-     * Pings a peer to test if it's still alive
+     * Pings a peer to test if it's still alive, and sends a list of peers that
+     * have disconnected.
      * @throws IOException In case an unexpected error happens while reading connections
      */
     public void ping(RemoteDevice peer) throws IOException {
@@ -107,9 +114,27 @@ public class Tracker implements Runnable {
             out.writeInt(-2);
             out.writeInt(serverPort);
             
+            /* We prepare the list of peers that have been disconnected */
+            String message = "";
+            ArrayList<RemoteDevice> disPeersCopy = new ArrayList<RemoteDevice>(disPeers);
+            for (RemoteDevice opeer : disPeersCopy) {
+                message += opeer.getId() + "|";
+            }
+            if (message.length() > 0) {
+                message = message.substring(0, message.length() - 1);
+            }
+            
+            /* We send the reply */
             out.writeInt(0);
             out.writeUTF("ping");
-            out.writeUTF("pong");
+            out.writeUTF(message);
+            
+            /* We clear the notifying list if everyone has been notified */
+            notPeers++;
+            if (notPeers >= peers.size()) {
+                disPeers = new ArrayList<RemoteDevice>();
+                notPeers = 0;
+            }
             
             try {
                 peerSocket.close();
@@ -121,11 +146,15 @@ public class Tracker implements Runnable {
         } catch (SocketTimeoutException ste) {
             System.out.println("Peer " + peer.getId() + " is no longer responding.");
             peers.remove(peer);
+            disPeers.add(peer);
+            notPeers = 0;
         } catch (UnknownHostException uhe) {
             System.err.println("Unknown host: " + peer.getIpAddress());
         } catch (IOException ioe) {
             System.out.println("Peer " + peer.getId() + " is no longer responding.");
             peers.remove(peer);
+            disPeers.add(peer);
+            notPeers = 0;
         }
     }
 
