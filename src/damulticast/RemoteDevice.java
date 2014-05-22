@@ -84,6 +84,13 @@ public class RemoteDevice {
         }
         return true;
     }
+
+    @Override
+    public int hashCode() {
+        int hash = 7;
+        hash = 83 * hash + this.id;
+        return hash;
+    }
     
     
 }

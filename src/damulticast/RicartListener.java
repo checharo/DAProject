@@ -7,5 +7,7 @@ package damulticast;
  */
 public interface RicartListener {
     
-    public void eventListener(String line);
+    public void resourceUpdate(String resource, int value);
+    
+    public void lockGranted(String resource);
 }

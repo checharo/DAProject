@@ -112,6 +112,14 @@ public class Message {
     }
 
     @Override
+    public int hashCode() {
+        int hash = 3;
+        hash = 13 * hash + this.id;
+        hash = 13 * hash + (this.peer != null ? this.peer.hashCode() : 0);
+        return hash;
+    }
+
+    @Override
     public String toString() {
         return "Message{" + "id=" + id + ", peer=" + peer.getId()+ ", header=" 
             + header + ", message=" + message + '}';

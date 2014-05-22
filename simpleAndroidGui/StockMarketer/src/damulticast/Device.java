@@ -1,12 +1,9 @@
 
 package damulticast;
 
-import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -14,7 +11,6 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
 
@@ -42,6 +38,7 @@ public class Device implements Runnable {
     /**
      * Listening thread for incoming messages. 
      */
+    @Override
     public void run() {
         try {
             this.listen();
@@ -236,10 +233,7 @@ public class Device implements Runnable {
                 }
                 long tj = ctj.getTimeInMillis();
                                 
-                if (lock == null) {
-                    /* TODO: This shouldn't happen */
-                    System.err.println("Resource does not exist: " + key);
-                } else if (lock.getState().equals("HELD") 
+                if (lock.getState().equals("HELD") 
                         || (lock.getState().equals("WANTED") && (tj < t))) {
                     lock.getRequestQueue().add(new ResourceRequest(peer, t));
                 } else {

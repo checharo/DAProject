@@ -21,6 +21,11 @@ public class ResourceState {
     /** The number of replies received for a request of a shared resource */
     private long acks;
 
+    public ResourceState() {
+        this.state = "";
+        this.requestQueue = new ArrayList<ResourceRequest>();
+    }
+    
     public ResourceState(String state, ArrayList<ResourceRequest> requestQueue) {
         this.state = state;
         this.requestQueue = requestQueue;
