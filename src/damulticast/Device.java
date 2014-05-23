@@ -82,9 +82,8 @@ public class Device implements Runnable {
             RemoteDevice peer = new RemoteDevice(in.readInt(), 
                 in.readUTF(), in.readInt());
             /* If the peer appears to be localhost, assign the tracker's ip address */
-            System.out.println(peer.getIpAddress());
             if (peer.getIpAddress().equals("127.0.0.1")) {
-                peer.setIpAddress(tracker.getLocalAddress().getHostAddress());
+                peer.setIpAddress(tracker.getInetAddress().getHostAddress());
             }
             this.getPeers().add(peer);
             morePeers = in.readBoolean();
