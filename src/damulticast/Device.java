@@ -309,13 +309,14 @@ public class Device implements Runnable {
          * disconnected */
         
         } else if (m.getHeader().equals("ping")) {
-            System.out.println(m.getMessage());
             String removePong = m.getMessage().substring(4, m.getMessage().length());
             StringTokenizer st = new StringTokenizer(removePong, "|");
             while (st.hasMoreTokens()) {
                 RemoteDevice dpeer = lookUpPeer(Integer.parseInt(st.nextToken()));
-                peers.remove(dpeer);
-                System.err.println("Tracker has dismissed peer " + dpeer.getId());
+                if (dpeer != null) {
+                    peers.remove(dpeer);
+                    System.err.println("Tracker has dismissed peer " + dpeer.getId());
+                }
             }
         
         /* reply-askstate */
