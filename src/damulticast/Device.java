@@ -81,6 +81,10 @@ public class Device implements Runnable {
         while (morePeers) {
             RemoteDevice peer = new RemoteDevice(in.readInt(), 
                 in.readUTF(), in.readInt());
+            /* If the peer appears to be localhost, assign the tracker's ip address */
+            if (peer.getIpAddress().equals("127.0.0.1")) {
+                peer.setIpAddress(tracker.getLocalAddress().getHostAddress());
+            }
             this.getPeers().add(peer);
             morePeers = in.readBoolean();
         }
@@ -305,8 +309,9 @@ public class Device implements Runnable {
          * disconnected */
         
         } else if (m.getHeader().equals("ping")) {
-            
-            StringTokenizer st = new StringTokenizer(m.getMessage(), "|");
+            System.out.println(m.getMessage());
+            String removePong = m.getMessage().substring(4, m.getMessage().length());
+            StringTokenizer st = new StringTokenizer(removePong, "|");
             while (st.hasMoreTokens()) {
                 RemoteDevice dpeer = lookUpPeer(Integer.parseInt(st.nextToken()));
                 peers.remove(dpeer);

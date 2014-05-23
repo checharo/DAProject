@@ -127,7 +127,7 @@ public class Tracker implements Runnable {
             /* We send the reply */
             out.writeInt(0);
             out.writeUTF("ping");
-            out.writeUTF(message);
+            out.writeUTF("pong" + message);
             
             /* We clear the notifying list if everyone has been notified */
             notPeers++;
